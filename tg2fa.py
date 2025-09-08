@@ -4,6 +4,7 @@ import os
 import time
 import sqlite3
 import logging
+import asyncio  # CHANGED: Added for the new webhook handler
 from functools import wraps
 from typing import Optional
 
@@ -11,7 +12,8 @@ from cryptography.fernet import Fernet
 import pyotp
 from flask import Flask, request
 
-from telegram import Update, Bot, InputFile
+from telegram import Update, Bot
+# CHANGED: Replaced Dispatcher with Application
 from telegram.ext import Application, CommandHandler, ContextTypes
 
 try:
@@ -27,7 +29,7 @@ FERNET_KEY = os.environ.get("FERNET_KEY")
 DB_PATH = "secrets_multi_whitelist.db"
 CODE_INTERVAL = 30
 RATE_LIMIT_SECONDS = 20
-OWNER_ID = 1632859637
+OWNER_ID = 1632859637 # Replace with your own Telegram User ID if needed
 
 if not TELEGRAM_TOKEN or not FERNET_KEY:
     raise RuntimeError("Set TELEGRAM_TOKEN and FERNET_KEY environment variables.")
@@ -224,9 +226,9 @@ async def add_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
     added = add_secret(user_id, label, secret)
     if not added:
         update_secret(user_id, label, secret)
-        await update.message.reply_text(f"Label `{label}` আগে থেকেই ছিল — secret আপডেট করা হয়েছে।")
+        await update.message.reply_text(f"Label `{label}` আগে থেকেই ছিল — secret আপডেট করা হয়েছে।")
     else:
-        await update.message.reply_text(f"Label `{label}` সফলভাবে যোগ হয়েছে।")
+        await update.message.reply_text(f"Label `{label}` সফলভাবে যোগ হয়েছে।")
 
 @authorized
 @rate_limited
@@ -239,7 +241,7 @@ async def get_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_id = update.effective_user.id
     enc = get_encrypted_secret(user_id, label)
     if not enc:
-        await update.message.reply_text("Label খুঁজে পাওয়া যায়নি। /list চেক করুন।")
+        await update.message.reply_text("Label খুঁজে পাওয়া যায়নি। /list চেক করুন।")
         return
     secret = decrypt_secret(enc)
     totp = pyotp.TOTP(secret)
@@ -270,9 +272,9 @@ async def delete_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_id = update.effective_user.id
     ok = delete_secret(user_id, label)
     if ok:
-        await update.message.reply_text(f"`{label}` মুছে ফেলা হয়েছে।")
+        await update.message.reply_text(f"`{label}` মুছে ফেলা হয়েছে।")
     else:
-        await update.message.reply_text("Label পাওয়া যায়নি। /list দিয়ে চেক করুন।")
+        await update.message.reply_text("Label পাওয়া যায়নি। /list দিয়ে চেক করুন।")
 
 @authorized
 async def qr_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -284,7 +286,7 @@ async def qr_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user = update.effective_user
     enc = get_encrypted_secret(user.id, label)
     if not enc:
-        await update.message.reply_text("Label পাওয়া যায়নি। /list চেক করুন।")
+        await update.message.reply_text("Label পাওয়া যায়নি। /list চেক করুন।")
         return
     secret = decrypt_secret(enc)
     issuer = "2FA-Multi-Bot"
@@ -316,7 +318,7 @@ async def allow_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
         return
     resolved = await resolve_user_arg(args[0], context)
     if not resolved:
-        await update.message.reply_text("User resolve করা যায়নি।")
+        await update.message.reply_text("User resolve করা যায়নি।")
         return
     uid, uname = resolved
     added = add_whitelist(uid, uname)
@@ -333,7 +335,7 @@ async def deny_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
         return
     resolved = await resolve_user_arg(args[0], context)
     if not resolved:
-        await update.message.reply_text("User resolve করা যায়নি।")
+        await update.message.reply_text("User resolve করা যায়নি।")
         return
     uid, _ = resolved
     if uid == OWNER_ID:
@@ -341,7 +343,7 @@ async def deny_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
         return
     removed = remove_whitelist(uid)
     if removed:
-        await update.message.reply_text(f"User `{uid}`-এর অনুমোদন বাতিল করা হয়েছে।")
+        await update.message.reply_text(f"User `{uid}`-এর অনুমোদন বাতিল করা হয়েছে।")
     else:
         await update.message.reply_text("User টি whitelist এ নেই।")
 
@@ -357,25 +359,29 @@ async def users_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
         lines.append(f"- {uid} ({uname}) added: {ts}")
     await update.message.reply_text("\n".join(lines))
 
-# ---------------- Flask App / Webhook ----------------
+# ---------------- Flask App / Webhook (CHANGED for python-telegram-bot v20+) ----------------
 app = Flask(__name__)
-bot = Bot(token=TELEGRAM_TOKEN)
-dp = Dispatcher(bot, None, workers=0)
 
-dp.add_handler(CommandHandler("start", start))
-dp.add_handler(CommandHandler("add", add_cmd))
-dp.add_handler(CommandHandler("get", get_cmd))
-dp.add_handler(CommandHandler("list", list_cmd))
-dp.add_handler(CommandHandler("delete", delete_cmd))
-dp.add_handler(CommandHandler("qr", qr_cmd))
-dp.add_handler(CommandHandler("allow", allow_cmd))
-dp.add_handler(CommandHandler("deny", deny_cmd))
-dp.add_handler(CommandHandler("users", users_cmd))
+# v20+ style initialization using Application builder
+application = Application.builder().token(TELEGRAM_TOKEN).build()
+
+# Add handlers to the application
+application.add_handler(CommandHandler("start", start))
+application.add_handler(CommandHandler("add", add_cmd))
+application.add_handler(CommandHandler("get", get_cmd))
+application.add_handler(CommandHandler("list", list_cmd))
+application.add_handler(CommandHandler("delete", delete_cmd))
+application.add_handler(CommandHandler("qr", qr_cmd))
+application.add_handler(CommandHandler("allow", allow_cmd))
+application.add_handler(CommandHandler("deny", deny_cmd))
+application.add_handler(CommandHandler("users", users_cmd))
 
 @app.route(f"/webhook/{TELEGRAM_TOKEN}", methods=["POST"])
-def webhook():
-    update = Update.de_json(request.get_json(force=True), bot)
-    dp.process_update(update)
+def webhook() -> str:
+    """Webhook endpoint to process updates."""
+    update = Update.de_json(request.get_json(force=True), application.bot)
+    # Run the async function process_update in the sync flask view
+    asyncio.run(application.process_update(update))
     return "ok"
 
 @app.route("/")
