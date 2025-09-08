@@ -22,7 +22,7 @@ except Exception:
     QR_LIB_AVAILABLE = False
 
 # ---------------- Config ----------------
-TELEGRAM_TOKEN = os.environ.get("TELEGRAM_TOKEN")
+TELEGRAM_TOKEN = os.environ.get("8293374166:AAHtv6IOdbDZ4Ze6pX8tQ8Am0rpW6hTdANk")
 FERNET_KEY = os.environ.get("FERNET_KEY")
 DB_PATH = "secrets_multi_whitelist.db"
 CODE_INTERVAL = 30
