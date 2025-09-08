@@ -1,5 +1,5 @@
-Flask==3.1.2
-python-telegram-bot==13.15
-cryptography==45.0.7
-pyotp==2.9.0
-qrcode==8.2
+python-telegram-bot==20.8
+cryptography
+pyotp
+Flask
+qrcode[pil]
