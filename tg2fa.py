@@ -12,7 +12,7 @@ import pyotp
 from flask import Flask, request
 
 from telegram import Update, Bot, InputFile
-from telegram.ext import Dispatcher, CommandHandler, ContextTypes
+from telegram.ext import Application, CommandHandler, ContextTypes
 
 try:
     import qrcode
